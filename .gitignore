@@ -1,0 +1,12 @@
+# Ignore a complete directory
+/Library/
+/Logs/
+/Packages/
+/ProjectSettings/
+/Usersettings/
+
+# Ignore some directory inside another directory
+/Assets/Import/
+
+# Ignore complete directories inside another directory
+#/parent_dir/*/  # Ignores all directories inside parent_dir
