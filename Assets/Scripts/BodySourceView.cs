@@ -24,6 +24,7 @@ public class BodySourceView : MonoBehaviour
 
     public multiplayerHandler multiplayer_handler;
 
+
     public int recordOffset = 20, recordCounter = 0, frameCounter = 0;
     public List<List<Vector3>> recordJoints = new List<List<Vector3>>();
 
@@ -81,8 +82,19 @@ public class BodySourceView : MonoBehaviour
             animator = fbxModel.GetComponent<Animator>();
         }
 
+        GameObject multiplayerHandlerObject = new GameObject("MultiplayerHandlerObject");
+        //multiplayer_handler = GetComponent<multiplayerHandler>();
+        multiplayer_handler = multiplayerHandlerObject.AddComponent<multiplayerHandler>();
+
+        if (multiplayer_handler == null)
+        {
+            Debug.LogError("Could not add multiplayerHandler component to the instantiated GameObject.");
+        }
+
         if (multiplayer){
-            multiplayer_handler = GetComponent<multiplayerHandler>();
+            //Debug.Log("HOLAA");
+            //multiplayer_handler = GetComponent<multiplayerHandler>();
+            //multiplayer_handler.broadcastData("1,0;2,0;3,0");
         }
 
         musicSource = GetComponent<AudioSource>();
@@ -90,6 +102,18 @@ public class BodySourceView : MonoBehaviour
 
     void Update ()
     {
+        if (multiplayer_handler != null)
+        { 
+            Debug.Log("HOLA");
+            multiplayer_handler.broadcastData("1,0;2,0;3,0");
+            Debug.Log(multiplayer_handler.getData());
+
+        }
+        else
+        {
+            Debug.Log("ADIOS");
+        }
+
         if (BodySourceManager == null)
         {
             return;
@@ -760,9 +784,6 @@ public class BodySourceView : MonoBehaviour
         // foreach (Vector3 vector in secondPlayerCoords){
         //     Debug.Log(vector);
         // }
-
-
-
     }
 
 
