@@ -2,8 +2,8 @@
 /Library/
 /Logs/
 /Packages/
-/ProjectSettings/
-/Usersettings/
+# /ProjectSettings/
+# /Usersettings/
 
 # Ignore some directory inside another directory
 /Assets/Import/

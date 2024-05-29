@@ -20,6 +20,10 @@ public class BodySourceView : MonoBehaviour
 
     public bool saveFrameJoints;
     public bool evaluateDance;
+    public bool multiplayer;
+
+    public multiplayerHandler multiplayer_handler;
+
     public int recordOffset = 20, recordCounter = 0, frameCounter = 0;
     public List<List<Vector3>> recordJoints = new List<List<Vector3>>();
 
@@ -33,6 +37,9 @@ public class BodySourceView : MonoBehaviour
 
     public AudioClip musicClip; // Reference to the audio clip
     private AudioSource musicSource; // Reference to the AudioSource component
+
+    private int framesPerSecond = 1;
+    private float timeSinceLastFrame = 0f;
 
     private Dictionary<Kinect.JointType, Kinect.JointType> _BoneMap = new Dictionary<Kinect.JointType, Kinect.JointType>()
     {
@@ -72,10 +79,13 @@ public class BodySourceView : MonoBehaviour
         if (evaluateDance){
             LoadReferenceFrames();
             animator = fbxModel.GetComponent<Animator>();
-
-            musicSource = GetComponent<AudioSource>();
-
         }
+
+        if (multiplayer){
+            multiplayer_handler = GetComponent<multiplayerHandler>();
+        }
+
+        musicSource = GetComponent<AudioSource>();
     }
 
     void Update ()
@@ -143,8 +153,20 @@ public class BodySourceView : MonoBehaviour
 
                 if (evaluateDance) evaluateFrame(body);
 
+                if (multiplayer){
+                    // Broadcast my body coords
+                    bcastMyBody(body);
+
+                    // Get, reconstruct and print the other players coords
+                    handleSecondPlayer();
+
+                    // Edit my coords to the left
+                    // Multiplayer evaluation
+
+                }
+
                 if (!animationStart){
-                    animator.Play("Finalized_Armature|ArmatureAction");
+                    if (evaluateDance) animator.Play("Finalized_Armature|ArmatureAction 0");
                     animationStart = true;
                     musicSource.clip = musicClip;
 
@@ -399,14 +421,28 @@ public class BodySourceView : MonoBehaviour
 
     public void recordFrame(Kinect.Body body){
 
-        if ((++recordCounter) % recordOffset != 0) return; // Doesnt record all the frames
+        timeSinceLastFrame += Time.deltaTime;
+        if (timeSinceLastFrame < 1f / framesPerSecond) return;
+
+        timeSinceLastFrame = 0f;
+
         recordJoints.Add(recordCurrentJoints(body));
         Debug.Log("RECORDING FRAME!!");
 
-        // TESTING
-        if (recordJoints.Count == 120) {
-            Debug.Log("END FRAMEEEEESSSSSSSSSSSSSSSSSS");
+        // // TESTING
+        // if (recordJoints.Count == 60){
+        //     Debug.Log("END FRAMEEEEESSSSSSSSSSSSSSSSSS");
+        //     saveTxtJoints();
+        // }
+
+        // Save point when music is finished
+        if (!musicSource.isPlaying) {
+            Debug.Log("Music finished playing!!");
+            Debug.Log("END FRAMEEEEESSS (By music)");
             saveTxtJoints();
+
+            saveFrameJoints = false;
+
         }
 
     }
@@ -453,8 +489,6 @@ public class BodySourceView : MonoBehaviour
                     vectSum[1] /= 25;
                     vectSum[2] /= 25;
 
-                    
-
                     for (int i = 0; i < currentFrame.Count; ++i){
                         Debug.Log("Joint: " +  currentFrame[i]);
                         currentFrame[i] -= vectSum;
@@ -487,64 +521,6 @@ public class BodySourceView : MonoBehaviour
         }
     }
 
-    // Método para comparar los puntos en tiempo real con los puntos del archivo de texto
-    private bool AreFramesSimilar(List<Vector3> realFrame, List<Vector3> referenceFrame)
-    {
-        // Verificar si la cantidad de puntos es diferente
-        if (realFrame.Count != referenceFrame.Count)
-        {
-            return false;
-        }
-
-        // Iterar sobre cada punto y verificar si son similares
-        for (int i = 0; i < realFrame.Count; i++)
-        {
-            float difference = Vector3.Distance(realFrame[i], referenceFrame[i]);
-            if (difference > similarityThreshold)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // Método para registrar los puntos similares durante la grabación
-    private void RecordSimilarFrames(Kinect.Body body)
-    {
-        // Si no se han cargado los frames de referencia, cargarlos
-        if (referenceFrames.Count == 0)
-        {
-            LoadReferenceFrames();
-        }
-
-        // Obtener el frame actual del cuerpo
-        List<Vector3> currentFrame = GetCurrentFrameFromBody(body);
-
-        // Iterar sobre los frames de referencia y compararlos con el frame actual
-        foreach (var referenceFrame in referenceFrames)
-        {
-            if (AreFramesSimilar(currentFrame, referenceFrame))
-            {
-                // Si el frame actual es similar a uno de los frames de referencia, registrar el frame
-                Debug.Log("Frame similar registrado: " + currentFrame);
-                // Aquí puedes agregar el frame actual a una lista de frames a guardar al final de la grabación
-                break; // Salir del bucle si se encuentra un frame similar
-            }
-        }
-    }
-
-    // Método para obtener el frame actual del cuerpo
-    private List<Vector3> GetCurrentFrameFromBody(Kinect.Body body)
-    {
-        List<Vector3> frame = new List<Vector3>();
-        foreach (var joint in body.Joints)
-        {
-            Vector3 jointPosition = GetVector3FromJoint(joint.Value);
-            frame.Add(jointPosition);
-        }
-        return frame;
-    }
-
     // Otros métodos necesarios...
 
     // Método para obtener las coordenadas de una articulación
@@ -558,13 +534,6 @@ public class BodySourceView : MonoBehaviour
     --------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------
     */
-
-
-
-
-
-
-
 
 
 
@@ -591,10 +560,13 @@ public class BodySourceView : MonoBehaviour
 
     }
 
+
     public void saveTxtJoints(){
 
+        string filePath = "Assets/SavedDances/joints_dance1.txt";
+
         // Create a StreamWriter to write to the file
-        using (StreamWriter writer = new StreamWriter("Assets/SavedDances/joints_dance1.txt")) {
+        using (StreamWriter writer = new StreamWriter(filePath)) {
             // Iterate through the list of lists
             foreach (List<Vector3> list in recordJoints) {
                 // Iterate through each Vector3 in the list
@@ -608,12 +580,22 @@ public class BodySourceView : MonoBehaviour
                 writer.WriteLine("*");
             }
         }
+
+        // Check if the file was saved successfully
+        if (File.Exists(filePath)) {
+            Debug.Log("File saved successfully at: " + filePath);
+        } else {
+            Debug.LogError("Failed to save file at: " + filePath);
+        }
     }
+
     
 
 
 
     public void evaluateFrame(Kinect.Body body){
+
+        DrawPoints();
 
         if ((++recordCounter) % recordOffset != 0) return; // Doesnt evaluate all the frames
 
@@ -663,6 +645,125 @@ public class BodySourceView : MonoBehaviour
 
     }
 
+
+    // void DrawPoints()
+    // {
+    //     LineRenderer lineRenderer = GetComponent<LineRenderer>();
+
+    //     if (lineRenderer == null)
+    //     {
+    //         lineRenderer = gameObject.AddComponent<LineRenderer>();
+    //         lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+    //         lineRenderer.startColor = Color.red;
+    //         lineRenderer.endColor = Color.red;
+    //         lineRenderer.startWidth = 0.05f;
+    //         lineRenderer.endWidth = 0.05f;
+    //         lineRenderer.useWorldSpace = false;
+    //     }
+
+    //     List<Vector3> localPoints = new List<Vector3>();
+    //     foreach (Vector3 point in referenceFrames[frameCounter])
+    //     {
+    //         localPoints.Add(transform.InverseTransformPoint(point)); // Convert world space points to local space
+    //     }
+
+    //     lineRenderer.positionCount = localPoints.Count;
+    //     lineRenderer.SetPositions(localPoints.ToArray());
+    // }
+
+    void DrawPoints()
+    {
+        LineRenderer lineRenderer = GetComponent<LineRenderer>();
+
+        if (lineRenderer == null)
+        {
+            lineRenderer = gameObject.AddComponent<LineRenderer>();
+            lineRenderer.material = new Material(Shader.Find("Sprites/Default"));
+            lineRenderer.startColor = Color.red;
+            lineRenderer.endColor = Color.red;
+            lineRenderer.startWidth = 0.05f;
+            lineRenderer.endWidth = 0.05f;
+            lineRenderer.useWorldSpace = false;
+        }
+
+        // Set position count to 0 to clear previous points
+        lineRenderer.positionCount = 0;
+
+        foreach (Vector3 point in referenceFrames[frameCounter])
+        {
+            lineRenderer.positionCount++; // Increase position count by 1
+            lineRenderer.SetPosition(lineRenderer.positionCount - 1, transform.InverseTransformPoint(point)); // Add the point to the LineRenderer
+        }
+    }
+
+
+
+
+    private void bcastMyBody(Kinect.Body body){
+
+        // How often should I send my data?
+        timeSinceLastFrame += Time.deltaTime; // This may not be here
+        if (timeSinceLastFrame < 1f / framesPerSecond) return;
+
+        string coords = "";
+
+        foreach (var joint in body.Joints){
+            Kinect.JointType jointType = joint.Key;
+            Kinect.Joint jointData = joint.Value;
+            Vector3 jointPosition = GetVector3FromJoint(jointData);
+
+            coords += jointPosition.x + ";" + jointPosition.y + ";" + jointPosition.z + " ";
+ 
+        }
+
+        coords = coords.Substring(0, coords.Length - 1);
+
+        multiplayer_handler.broadcastData(coords);
+
+    }
+
+    private List<Vector3> parseMultiplayerData(string inputString){
+         // Split the input string by space to get individual coordinates
+        string[] coordinateStrings = inputString.Split(' ');
+
+        // Create a list to store Vector3 objects
+        List<Vector3> vectorList = new List<Vector3>();
+
+        // Loop through each coordinate string
+        foreach (string coordinateString in coordinateStrings)
+        {
+            // Split the coordinate string by semicolon to get individual components
+            string[] components = coordinateString.Split(';');
+
+            // Parse each component and create a Vector3 object
+            float x = float.Parse(components[0]);
+            float y = float.Parse(components[1]);
+            float z = float.Parse(components[2]);
+
+            // Create the Vector3 object and add it to the list
+            vectorList.Add(new Vector3(x, y, z));
+        }
+
+        return vectorList;
+
+    }
+
+
+    private void handleSecondPlayer(){
+
+        // How often should I receive my data?
+        if (timeSinceLastFrame < 1f / framesPerSecond) return;
+
+        string rawData = multiplayer_handler.getData();
+        List<Vector3> secondPlayerCoords = parseMultiplayerData(rawData);
+
+        // foreach (Vector3 vector in secondPlayerCoords){
+        //     Debug.Log(vector);
+        // }
+
+
+
+    }
 
 
 }
