@@ -1,9 +1,13 @@
 using UnityEngine;
 using UnityEngine.Networking;
+using System;
+using System.Text;
+using System.Collections;
 
 public class multiplayerHandler : MonoBehaviour
 {
     public BodySourceView kinectBody;
+
 
     // Start is called before the first frame update
     void Start()
@@ -21,27 +25,39 @@ public class multiplayerHandler : MonoBehaviour
         SendDataToServer(myBodydata);
     }
 
-    void SendDataToServer(string data)
+    public void SendDataToServer(string str)
     {
         string url = "http://localhost:3000/receive-string";
-        UnityWebRequest www = UnityWebRequest.Post(url, data);
-        www.SendWebRequest();
+        DataObject d = new DataObject();
+        d.data = str;
+        string mjson = JsonUtility.ToJson(d);
+        StartCoroutine(Post(url, mjson));
+    }
 
-        while (!www.isDone)
-        {
-            // Wait until the request is done
-        }
+    [System.Serializable]
+    public class DataObject
+    {
+        public string data;
+    }
 
-        if (www.result != UnityWebRequest.Result.Success)
+    IEnumerator Post(string url, string dataString)
+    {
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(dataString);
+        var request = new UnityWebRequest(url, "POST");
+        request.uploadHandler = (UploadHandler)new UploadHandlerRaw(bodyRaw);
+        request.downloadHandler = (DownloadHandler)new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogError("Failed to send data: " + www.error);
+            Debug.LogError("Error: " + request.error);
         }
         else
         {
             Debug.Log("Data sent successfully!");
         }
-
-        www.Dispose(); // Dispose to free up memory
     }
 
     public string getData()

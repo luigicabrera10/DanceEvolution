@@ -107,7 +107,6 @@ public class BodySourceView : MonoBehaviour
             Debug.Log("HOLA");
             multiplayer_handler.broadcastData("1,0;2,0;3,0");
             Debug.Log(multiplayer_handler.getData());
-
         }
         else
         {
