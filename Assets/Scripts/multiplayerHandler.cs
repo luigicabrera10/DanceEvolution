@@ -27,7 +27,7 @@ public class multiplayerHandler : MonoBehaviour
 
     public void SendDataToServer(string str)
     {
-        string url = "http://localhost:3000/receive-string";
+        string url = "http://localhost:3000/receive-string1";
         DataObject d = new DataObject();
         d.data = str;
         string mjson = JsonUtility.ToJson(d);
@@ -56,13 +56,13 @@ public class multiplayerHandler : MonoBehaviour
         }
         else
         {
-            Debug.Log("Data sent successfully!");
+            Debug.Log("Data sent:" + dataString);
         }
     }
 
     public string getData()
     {
-        string url = "http://localhost:3000/get-data"; // Adjust the URL to your server endpoint
+        string url = "http://localhost:3000/get-data2"; // Adjust the URL to your server endpoint
         UnityWebRequest www = UnityWebRequest.Get(url);
         www.SendWebRequest();
 

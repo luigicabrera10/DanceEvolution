@@ -42,6 +42,12 @@ public class BodySourceView : MonoBehaviour
     private int framesPerSecond = 1;
     private float timeSinceLastFrame = 0f;
 
+    private List<Vector3> secondPlayerCoords;
+
+    private LineRenderer[] skeletonRenderer;
+
+    private string myRawJoints;
+
     private Dictionary<Kinect.JointType, Kinect.JointType> _BoneMap = new Dictionary<Kinect.JointType, Kinect.JointType>()
     {
         { Kinect.JointType.FootLeft, Kinect.JointType.AnkleLeft },
@@ -98,20 +104,36 @@ public class BodySourceView : MonoBehaviour
         }
 
         musicSource = GetComponent<AudioSource>();
+
+
+        // Initialize LineRenderers
+        skeletonRenderer = new LineRenderer[bones.GetLength(0)];
+        for (int i = 0; i < bones.GetLength(0); i++)
+        {
+            GameObject lineObj = new GameObject("Bone_" + i);
+            lineObj.transform.parent = this.transform;
+            LineRenderer lr = lineObj.AddComponent<LineRenderer>();
+            lr.startWidth = 0.15f;
+            lr.endWidth = 0.15f;
+            lr.material = new Material(Shader.Find("Sprites/Default"));
+            lr.startColor = Color.green;
+            lr.endColor = Color.green;
+            skeletonRenderer[i] = lr;
+        }
     }
 
     void Update ()
     {
-        if (multiplayer_handler != null)
-        { 
-            Debug.Log("HOLA");
-            multiplayer_handler.broadcastData("1,0;2,0;3,0");
-            Debug.Log(multiplayer_handler.getData());
-        }
-        else
-        {
-            Debug.Log("ADIOS");
-        }
+        // if (multiplayer_handler != null)
+        // { 
+        //     Debug.Log("HOLA");
+        //     multiplayer_handler.broadcastData("1,0;2,0;3,0");
+        //     Debug.Log("Received Data From Server:" + multiplayer_handler.getData());
+        // }
+        // else
+        // {
+        //     Debug.Log("ADIOS");
+        // }
 
         if (BodySourceManager == null)
         {
@@ -194,6 +216,7 @@ public class BodySourceView : MonoBehaviour
                     musicSource.clip = musicClip;
 
                     musicSource.Play();
+                    PrintSkeletonJoints(body);
 
                 }
 
@@ -315,6 +338,24 @@ public class BodySourceView : MonoBehaviour
 
             Debug.Log("Joint: " + jointType + ", X: " + jointPosition.x + ", Y: " + jointPosition.y + ", Z: " + jointPosition.z);
         }
+    }
+
+    private void PrintSkeletonJoints(Kinect.Body body)
+    {
+
+        string result = "";
+
+        foreach (var joint in body.Joints)
+        {
+            Kinect.JointType jointType = joint.Key;
+            Kinect.Joint jointData = joint.Value;
+            Vector3 jointPosition = GetVector3FromJoint(jointData);
+
+            result += jointType + ", "+ "\n";
+
+        }
+
+        Debug.Log(result);
     }
 
     private List<Vector3> GetHandsCoords(Kinect.Body body)
@@ -513,7 +554,7 @@ public class BodySourceView : MonoBehaviour
                     vectSum[2] /= 25;
 
                     for (int i = 0; i < currentFrame.Count; ++i){
-                        Debug.Log("Joint: " +  currentFrame[i]);
+                        // Debug.Log("Joint: " +  currentFrame[i]);
                         currentFrame[i] -= vectSum;
                     }
 
@@ -654,8 +695,8 @@ public class BodySourceView : MonoBehaviour
 
             Kinect.JointType jointType = joint.Key;
             if (jointType == Kinect.JointType.HandLeft){
-                Debug.Log("Dancer Hand: " + jointPosition);
-                Debug.Log("Model  Hand: " + referenceFrames[frameCounter][i-1]);
+                // Debug.Log("Dancer Hand: " + jointPosition);
+                // Debug.Log("Model  Hand: " + referenceFrames[frameCounter][i-1]);
             }
             
         }
@@ -664,7 +705,7 @@ public class BodySourceView : MonoBehaviour
         localEuclidean = (double) localEuclidean / i;
         totalEuclidean += (double) localEuclidean / referenceFrames.Count; 
 
-        Debug.Log("Total euclidean (Frame Evaluator): " + localEuclidean);
+        // Debug.Log("Total euclidean (Frame Evaluator): " + localEuclidean);
 
     }
 
@@ -720,7 +761,21 @@ public class BodySourceView : MonoBehaviour
     }
 
 
+    private string getMyRawJoints(Kinect.Body body){
+        myRawJoints = "";
 
+        foreach (var joint in body.Joints){
+            Kinect.JointType jointType = joint.Key;
+            Kinect.Joint jointData = joint.Value;
+            Vector3 jointPosition = GetVector3FromJoint(jointData);
+
+            myRawJoints += jointPosition.x + ";" + jointPosition.y + ";" + jointPosition.z + " ";
+ 
+        }
+
+        myRawJoints = myRawJoints.Substring(0, myRawJoints.Length - 1);
+        return myRawJoints;
+    }
 
     private void bcastMyBody(Kinect.Body body){
 
@@ -728,20 +783,22 @@ public class BodySourceView : MonoBehaviour
         timeSinceLastFrame += Time.deltaTime; // This may not be here
         if (timeSinceLastFrame < 1f / framesPerSecond) return;
 
-        string coords = "";
+        string coords = getMyRawJoints(body);
 
-        foreach (var joint in body.Joints){
-            Kinect.JointType jointType = joint.Key;
-            Kinect.Joint jointData = joint.Value;
-            Vector3 jointPosition = GetVector3FromJoint(jointData);
+        // Debug.Log(coords);
 
-            coords += jointPosition.x + ";" + jointPosition.y + ";" + jointPosition.z + " ";
- 
+        // THIS IS THE CALL TO SEND DATA TO  SERVER
+        // multiplayer_handler.broadcastData(coords);
+        if (multiplayer_handler != null)
+        {
+            Debug.Log("Sending coords to server.");
+            multiplayer_handler.broadcastData(coords);
+            Debug.Log("Data sent succesfully.");
         }
-
-        coords = coords.Substring(0, coords.Length - 1);
-
-        multiplayer_handler.broadcastData(coords);
+        else
+        {
+            Debug.Log("Error server unavailable.");
+        }
 
     }
 
@@ -759,7 +816,7 @@ public class BodySourceView : MonoBehaviour
             string[] components = coordinateString.Split(';');
 
             // Parse each component and create a Vector3 object
-            float x = float.Parse(components[0]);
+            float x = float.Parse(components[0]) + 8.0f;
             float y = float.Parse(components[1]);
             float z = float.Parse(components[2]);
 
@@ -775,15 +832,139 @@ public class BodySourceView : MonoBehaviour
     private void handleSecondPlayer(){
 
         // How often should I receive my data?
-        if (timeSinceLastFrame < 1f / framesPerSecond) return;
+        if (timeSinceLastFrame < 1f / framesPerSecond){
+            // Draw Second Player skeleton
+            buildSecondPlayerSkeleton();
+            return;
+        }
 
-        string rawData = multiplayer_handler.getData();
-        List<Vector3> secondPlayerCoords = parseMultiplayerData(rawData);
+        // Get data from another body vs get get xample data
+        string rawData = "";
+
+        if (multiplayer_handler != null)
+        {
+            Debug.Log("Obtaining coords from server.");
+            rawData = multiplayer_handler.getData();
+            Debug.Log("Received Data From Server:" + rawData);
+        }
+        else
+        {
+            Debug.Log("Error server unavailable.");
+        }
+        // string rawData = multiplayer_handler.getData();
+        // string rawData = "1,710967;-2,158211;11,32239 2,003033;0,2320382;9,664892 2,235195;2,512494;7,845569 2,373011;3,43982;7,431796 0,6008376;2,121691;8,378319 -1,169461;0,4527397;9,151056 -2,693496;-0,653423;7,947274 -3,131407;-0,6501862;7,61282 3,51626;1,672456;7,735881 5,307647;0,468281;7,354301 5,499436;-1,702253;7,369431 5,585092;-2,422013;7,404788 0,8425283;-1,980635;11,0223 0,2720947;-4,604675;11,05048 -0,6126581;-8,969175;11,65069 -0,8845406;-9,447478;10,63683 2,47036;-2,201218;10,91058 2,453259;-4,193339;8,649002 2,523203;-7,54302;5,377934 2,202255;-7,890672;4,283379 2,187695;1,964627;8,324061 -3,836374;-0,9140027;7,374783 -2,87657;-1,175836;7,929423 5,48987;-2,408348;7,194131 5,414104;-2,178874;7,147084";
+        rawData = myRawJoints;
+
+
+        secondPlayerCoords = parseMultiplayerData(rawData);
+
+        // Draw Second Player skeleton
+        buildSecondPlayerSkeleton();
 
         // foreach (Vector3 vector in secondPlayerCoords){
         //     Debug.Log(vector);
         // }
     }
+
+    private readonly int[,] bones = new int[,]
+    {
+        // {0, 1}, // SpineBase -> SpineMid
+        // {1, 21}, // SpineMid -> SpineShoulder
+        // {21, 2}, // SpineShoulder -> Neck
+        // {2, 3}, // Neck -> Head
+        // {21, 4}, // SpineShoulder -> ShoulderLeft
+        // {4, 5}, // ShoulderLeft -> ElbowLeft
+        // {5, 6}, // ElbowLeft -> WristLeft
+        // {6, 7}, // WristLeft -> HandLeft
+        // {7, 22}, // HandLeft -> HandTipLeft
+        // {6, 23}, // WristLeft -> ThumbLeft
+        // {21, 8}, // SpineShoulder -> ShoulderRight
+        // {8, 9}, // ShoulderRight -> ElbowRight
+        // {9, 10}, // ElbowRight -> WristRight
+        // {10, 11}, // WristRight -> HandRight
+        // {11, 24}, // HandRight -> HandTipRight
+        // {10, 25}, // WristRight -> ThumbRight
+        // {0, 12}, // SpineBase -> HipLeft
+        // {12, 13}, // HipLeft -> KneeLeft
+        // {13, 14}, // KneeLeft -> AnkleLeft
+        // {14, 15}, // AnkleLeft -> FootLeft
+        // {0, 16}, // SpineBase -> HipRight
+        // {16, 17}, // HipRight -> KneeRight
+        // {17, 18}, // KneeRight -> AnkleRight
+        // {18, 19} // AnkleRight -> FootRight
+
+        {0, 1},     // SpineBase -> SpineMid
+        {1, 20},    // SpineMid -> SpineShoulder
+        {20, 2},    // SpineShoulder -> Neck
+        {2, 3},     // Neck -> Head
+        {20, 4},    // SpineShoulder -> ShoulderLeft
+        {4, 5},     // ShoulderLeft -> ElbowLeft
+        {5, 6},     // ElbowLeft -> WristLeft
+        {6, 7},     // WristLeft -> HandLeft
+        {20, 8},    // SpineShoulder -> ShoulderRight
+        {8, 9},     // ShoulderRight -> ElbowRight
+        {9, 10},    // ElbowRight -> WristRight
+        {10, 11},   // WristRight -> HandRight
+        {0, 12},    // SpineBase -> HipLeft
+        {12, 13},   // HipLeft -> KneeLeft
+        {13, 14},   // KneeLeft -> AnkleLeft
+        {14, 15},   // AnkleLeft -> FootLeft
+        {0, 16},    // SpineBase -> HipRight
+        {16, 17},   // HipRight -> KneeRight
+        {17, 18},   // KneeRight -> AnkleRight
+        {18, 19},   // AnkleRight -> FootRight
+        {7, 21},    // HandLeft -> HandTipLeft
+        {7, 22},    // HandLeft -> ThumbLeft
+        {11, 23},   // HandRight -> HandTipRight
+        {11, 24}    // HandRight -> ThumbRight
+    };
+
+    
+
+    private void buildSecondPlayerSkeleton(){
+
+        if (secondPlayerCoords == null) return;
+        if (secondPlayerCoords.Count == 0) return;
+
+        // Drawing the bones
+        // DrawBone(0, 1);     // SpineBase -> SpineMid
+        // DrawBone(1, 20);    // SpineMid -> SpineShoulder
+        // DrawBone(20, 2);    // SpineShoulder -> Neck
+        // DrawBone(2, 3);     // Neck -> Head
+        // DrawBone(20, 4);    // SpineShoulder -> ShoulderLeft
+        // DrawBone(4, 5);     // ShoulderLeft -> ElbowLeft
+        // DrawBone(5, 6);     // ElbowLeft -> WristLeft
+        // DrawBone(6, 7);     // WristLeft -> HandLeft
+        // DrawBone(20, 8);    // SpineShoulder -> ShoulderRight
+        // DrawBone(8, 9);     // ShoulderRight -> ElbowRight
+        // DrawBone(9, 10);    // ElbowRight -> WristRight
+        // DrawBone(10, 11);   // WristRight -> HandRight
+        // DrawBone(0, 12);    // SpineBase -> HipLeft
+        // DrawBone(12, 13);   // HipLeft -> KneeLeft
+        // DrawBone(13, 14);   // KneeLeft -> AnkleLeft
+        // DrawBone(14, 15);   // AnkleLeft -> FootLeft
+        // DrawBone(0, 16);    // SpineBase -> HipRight
+        // DrawBone(16, 17);   // HipRight -> KneeRight
+        // DrawBone(17, 18);   // KneeRight -> AnkleRight
+        // DrawBone(18, 19);   // AnkleRight -> FootRight
+        // DrawBone(7, 21);    // HandLeft -> HandTipLeft
+        // DrawBone(7, 22);    // HandLeft -> ThumbLeft
+        // DrawBone(11, 23);   // HandRight -> HandTipRight
+        // DrawBone(11, 24);   // HandRight -> ThumbRight
+
+        for (int i = 0; i < bones.GetLength(0); i++){
+            int joint1 = bones[i, 0];
+            int joint2 = bones[i, 1];
+            LineRenderer lr = skeletonRenderer[i];
+            lr.SetPosition(0, secondPlayerCoords[joint1]);
+            lr.SetPosition(1, secondPlayerCoords[joint2]);
+        }
+
+    }
+
+    // private void DrawBone(int joint1, int joint2){
+    //     Debug.DrawLine(secondPlayerCoords[joint1], secondPlayerCoords[joint2], Color.red);
+    // }
 
 
 }
